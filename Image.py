@@ -9,7 +9,7 @@ import psutil
 import cv2
 from scipy.stats import norm
 
-#importer matplotlib, scikit-learn et scikit-image
+# importer matplotlib, scikit-learn et scikit-image
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
@@ -17,36 +17,38 @@ from sklearn.cluster import KMeans
 from skimage.measure import label
 from sklearn import svm
 
-format_couleur = ["PNG","JPEG","JPG","PPM"]
-format_gris = ["PPM","BPM"]
+format_couleur = ["PNG", "JPEG", "JPG", "PPM"]
+format_gris = ["PPM", "BPM"]
 
 default_threshold = 0.5
 
+
 class Img:
-    def __init__(self, path, fal = False):
+    def __init__(self, path, fal=False):
         self.path = path
         self.image = Image.open(path)
+        self.img = cv2.imread(path)
         self.format = self.image.format
         self.tableau = np.array(self.image)
-        self.tableau2D = np.reshape(self.image,(-1, 3))
+        self.tableau2D = np.reshape(self.image, (-1, 3))
         self.pgm = self.image.convert('L')
         self.tableauPGM = np.array(self.pgm)
         self.data = list(self.image.getdata())
         self.width, self.height = self.image.size
-        #test corrélation
+        # test corrélation
         self.NPtableauPGM = cv2.cvtColor(self.tableau, cv2.COLOR_RGB2GRAY)
-        self.sift = cv2.xfeatures2d.SIFT_create()
+        self.sift = cv2.SIFT_create()
         self.key_point, self.descriptors = self.sift.detectAndCompute(self.NPtableauPGM, None)
 
-        #test corrélation
+        # test corrélation
         self.falsif = fal
 
-        #learning ou default
+        # learning ou default
         self.d_threshold = 0.5
         self.threshold = svm.SVC()
         self.jeu = None
         self.jeu_etiq = None
-        
+
     def disp(self):
         print(f"Image tableau object of format {self.format} and shape {self.tableau.shape} from {self.path}")
 
@@ -66,7 +68,21 @@ class Img:
         return hist, binss
 
     def gauss(self, x, mu=1, sigma=0):
-        return (1 / (sigma * np.sqrt(2 * np.pi))) * np.exp(-((x - mu)**2) / (2 * sigma**2))
+        return (1 / (sigma * np.sqrt(2 * np.pi))) * np.exp(-((x - mu) ** 2) / (2 * sigma ** 2))
+
+    def drawSift(self, path, isGrey):
+        img2 = self.img
+        if(isGrey):
+            gray = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
+            keyPoints = self.sift.detect(gray, None)
+            img2 = cv2.drawKeypoints(gray, keyPoints, img2)
+            cv2.imwrite(path, img2)
+        else:
+            keyPoints = self.sift.detect(img2, None)
+            img2 = cv2.drawKeypoints(img2, keyPoints, img2)
+            cv2.imwrite(path, img2)
+
+
 
     def plot_histogram(self, bins=256):
         hist, binss = self.histogram(bins=bins)
@@ -140,7 +156,7 @@ class Img:
         else:
             print("pas bon format")
 
-    #Utile pour les régions apparement
+    # Utile pour les régions apparement
     def Y(self):
         if self.tableau.shape[2] == 3:
             return self.tableau[:, :, 0]
@@ -173,44 +189,46 @@ class Img:
 
     def Kmeans(self, k):
         Kmeans = KMeans(n_clusters=k, random_state=0).fit(self.tableauPGM)
-    
+
         Reconstruc_seg_image = Kmeans.cluster_centers_[Kmeans.labels_]
         Reconstruc_seg_image = np.reshape(Reconstruc_seg_image, self.tableauPGM.shape)
-        
+
         segmented_image = Image.fromarray(np.uint8(Reconstruc_seg_image))
         segmented_image = segmented_image.convert('RGB')
-        
-        return segmented_image#, Kmeans.inertia_
+
+        return segmented_image  # , Kmeans.inertia_
 
     def Kmeans_compare(self, Reference, k):
         IMG_original = self.cluster(k)
         IMG_reference = Reference.cluster(k)
 
-        MoyO = np.reshape(KMeans(n_clusters=k, random_state=0).fit(np.reshape(IMG_original, (-1, 3))).cluster_centers_, (1, k, 3))
-        MoyR = np.reshape(KMeans(n_clusters=k, random_state=0).fit(np.reshape(IMG_reference, (-1, 3))).cluster_centers_, (k, 1, 3))
+        MoyO = np.reshape(KMeans(n_clusters=k, random_state=0).fit(np.reshape(IMG_original, (-1, 3))).cluster_centers_,
+                          (1, k, 3))
+        MoyR = np.reshape(KMeans(n_clusters=k, random_state=0).fit(np.reshape(IMG_reference, (-1, 3))).cluster_centers_,
+                          (k, 1, 3))
 
         d_euclide = np.linalg.norm(MoyO - MoyR, axis=2)
         return np.mean(d_euclide)
 
     def cluster(self, *args, **kwargs):
-        if k == 1 :
+        if k == 1:
             return self.KMeans(kwargs["kmean"])
 
     def compare(self, option, *args):
-        if option == 1 :
+        if option == 1:
             return Kmeans_compare(kwargs["reference"], kwargs["kmean"])
 
     def train(self, data_jeu, data_etiq):
         self.jeu = np.array([Image.open(data_path).convert('L').flatten() for data_path in data_jeu])
         self.jeu_etiq = np.array(data_etiq)
         self.threshold.fit(self.jeu, self.jeu_etiq)
-        
+
     def predict(self):
         pgm = self.pgm.flatten()
         return self.threshold.predict([pgm])
 
-    def falsification(self, threshold = default_threshold, ia = False) :
-        if ia is False :
+    def falsification(self, threshold=default_threshold, ia=False):
+        if ia is False:
             if self.descriptors is None:
                 self.falsif = False
             else:
@@ -219,14 +237,14 @@ class Img:
                     self.falsif = True
                 else:
                     self.falsif = False
-        else :
+        else:
             self.falsif = bool(self.predict())
 
-    #Cette fonction suit l'algortihme de points d'intérêts par segmentation spatiale de régions
-    #Un peu chaud à faire et incomplète sauf la base de la base
-    #Rien ne garanti que 'la base' est une bonne base, franchement j'ai pas confiance
-    #Les accès à la classe sont bons mais encore faut bien s'en servir au bon moment
-    #Pas sur avec un code incomplet
+    # Cette fonction suit l'algortihme de points d'intérêts par segmentation spatiale de régions
+    # Un peu chaud à faire et incomplète sauf la base de la base
+    # Rien ne garanti que 'la base' est une bonne base, franchement j'ai pas confiance
+    # Les accès à la classe sont bons mais encore faut bien s'en servir au bon moment
+    # Pas sur avec un code incomplet
     def region(self, threshold, min_size):
         # Niveaux de gris
         self.tableauPGM
@@ -237,31 +255,31 @@ class Img:
         for i in range(self.tableauPGM[0]):
             for j in range(self.tableauPGM[1]):
                 # Pixel pas trouvé
-                    # Définir région intiale courrante
-                    region = []
-                    region.add((i, j))
-                    # Bornes
-                    limit = 0
-                    # Parcourir les voisins pour trouver le reste de la région
-                    # Faire pile pixel --> region.pop()
-                    while len(region) > 0:
-                        pixel = region.pop()
-                        voisins = []
-                        for v in voisins:
-                            # Si pixel in region et pas deja compte
-                            compte = True
-                            In = False
-                            if (In and not compte):
-                                # Si pixel ok et pas hors limites
-                                Ok = False
-                                hors = True
-                                if Ok and not hors:
-                                    region.add(v)
-                                    Seg[v]=Current
-                    # Si region est ok passer à la suivante
-                    region_ok = True
-                    if region_ok : Current += 1
+                # Définir région intiale courrante
+                region = []
+                region.add((i, j))
+                # Bornes
+                limit = 0
+                # Parcourir les voisins pour trouver le reste de la région
+                # Faire pile pixel --> region.pop()
+                while len(region) > 0:
+                    pixel = region.pop()
+                    voisins = []
+                    for v in voisins:
+                        # Si pixel in region et pas deja compte
+                        compte = True
+                        In = False
+                        if (In and not compte):
+                            # Si pixel ok et pas hors limites
+                            Ok = False
+                            hors = True
+                            if Ok and not hors:
+                                region.add(v)
+                                Seg[v] = Current
+                # Si region est ok passer à la suivante
+                region_ok = True
+                if region_ok: Current += 1
         # Étiqueter régions
         Map = label(Seg)
-        
+
         return Map
