@@ -1,217 +1,178 @@
 import cv2
 import numpy as np
-from scipy import spatial
-from sklearn.metrics.pairwise import cosine_similarity,cosine_distances
-from numpy import dot
-from numpy.linalg import norm
+import matplotlib.pyplot as plt
+from sklearn.cluster import KMeans
+from scipy.spatial.distance import euclidean
 
-forged_img = cv2.imread("images/poissons_falsifiés.png")
-grey_forged_img = cv2.cvtColor(forged_img, cv2.COLOR_BGR2GRAY)
-red_channel = forged_img[:, :, 2]
-green_channel = forged_img[:, :, 1]
-blue_channel = forged_img[:, :, 0]
-block_size = 15*15
-block_width = 15
-block_height = 15
-height = forged_img.shape[0]
-width = forged_img.shape[1]
-overlapping = 0.5
-number_blocks = 0
+#Passage de l'image en nuances de gris
+suspicious_image = cv2.imread('data/zebres_forgery.png')
+ndg_suspicious_image = cv2.cvtColor(suspicious_image, cv2.COLOR_BGR2GRAY)
 
-#Divide image in overlapping blocks
-print("Début de calcul des start point...")
-def start_points(size, split_size, overlap=0):
-    points = [0]
-    stride = int(split_size * (1-overlap))
-    counter = 1
-    while True:
-        pt = stride * counter
-        if pt + split_size >= size:
-            if split_size == size:
-                break
-            points.append(size - split_size)
-            break
-        else:
-            points.append(pt)
-        counter += 1
-    return points
+block_size = (64, 64)
+overlap_size = (32, 32)
 
-#1734
-X_points = start_points(width, block_width, 0.5)
-Y_points = start_points(height, block_height, 0.5)
-print(X_points)
-print(Y_points)
-print("End of starting points...")
+num_rows = int(np.ceil((ndg_suspicious_image.shape[0] - block_size[1])/overlap_size[1])) + 1
+num_cols = int(np.ceil((ndg_suspicious_image.shape[1] - block_size[0])/overlap_size[0])) + 1
 
-red_blocks = []
-green_blocks = []
-blue_blocks = []
+blocks = np.zeros((num_rows, num_cols, block_size[1], block_size[0]), dtype=np.uint8)
+block_keypoints = []
+block_descriptors = []
+LBP_features = []
 
-print("Début du split de l'image...")
-for i in Y_points:
-    for j in X_points:
-        split_red = red_channel[i:i+block_height, j:j+block_width]
-        red_blocks.append(split_red)
-        split_green = green_channel[i:i + block_height, j:j + block_width]
-        green_blocks.append(split_green)
-        split_blue = blue_channel[i:i + block_height, j:j + block_width]
-        blue_blocks.append(split_blue)
-        number_blocks += 1
-print(split_red)
-print(split_green)
-print(split_blue)
-print("End of split image...")
+sift = cv2.SIFT_create()
 
-print("Begin of LBP...")
-#LBP
-def get_pixel(img, center, x, y):
-    new_value = 0
-    try:
-        if img[x][y] >= center:
-            new_value = 1
-    except:
-        pass
+'''
+keypoints, descriptors = sift.detectAndCompute(ndg_suspicious_image, None)
 
-    return new_value
+# Perform k-means clustering on the descriptors
+kmeans = KMeans(n_clusters=10)
+kmeans.fit(descriptors)
 
+# Get cluster assignments for each descriptor
+labels = kmeans.predict(descriptors)
 
-def get_pixel(img, center, x, y):
-    new_value = 0
+# Create a dictionary to store keypoints for each cluster
+clusters = {}
+for i, label in enumerate(labels):
+    if label not in clusters:
+        clusters[label] = []
+    clusters[label].append(keypoints[i])
 
-    try:
-        if img[x][y] >= center:
-            new_value = 1
+# Visualize the clustered keypoints
+vis = cv2.drawKeypoints(ndg_suspicious_image, sum(clusters.values(), []), None, color=(0, 255, 0))
+cv2.imshow("Clustered Keypoints", vis)
+cv2.waitKey(0)
+cv2.destroyAllWindows()
+'''
 
-    except:
-        pass
+def get_lbp_features(img_block, radius=1, n_points=8):
+    height, width = img_block.shape
+    lbp = np.zeros((height, width), dtype=np.uint8)
+    for y in range(radius, height - radius):
+        for x in range(radius, width - radius):
+            center = img_block[y, x]
+            pixel_values = []
+            for i in range(n_points):
+                angle = float(i) * (2.0 * np.pi / n_points)
+                x_i = x + int(round(radius * np.cos(angle)))
+                y_i = y - int(round(radius * np.sin(angle)))
+                pixel_values.append(img_block[y_i, x_i])
+            binary_values = [int(pv >= center) for pv in pixel_values]
+            lbp_value = sum([2**i * bv for i, bv in enumerate(binary_values)])
+            lbp[y - radius, x - radius] = lbp_value
+    hist, _ = np.histogram(lbp.ravel(), bins=np.arange(0, 2**n_points + 1), range=(0, 2**n_points))
+    hist = hist.astype("float")
+    hist /= (hist.sum() + 1e-7)
+    return hist
 
-    return new_value
+def block_matching(lbp_features, threshold):
+    """
+    Identifie les blocs de texture similaires en comparant les histogrammes LBP de chaque paire de blocs.
+    
+    Args:
+        lbp_features: tableau numpy de taille (num_blocks, num_bins), contenant les histogrammes LBP de chaque bloc.
+        threshold: seuil de similarité pour considérer deux blocs comme étant similaires. La valeur par défaut est 0.2.
+    
+    Returns:
+        liste de tuples contenant les indices des blocs similaires.
+    """
+    num_blocks = lbp_features.shape[0]
+    similar_blocks = []
+    
+    # Calcul de la distance euclidienne entre les histogrammes LBP de chaque paire de blocs
+    for i in range(num_blocks):
+        for j in range(i+1, num_blocks):
+            dist = euclidean(lbp_features[i], lbp_features[j])
+            # Si la distance est inférieure au seuil, les deux blocs sont considérés comme similaires
+            if dist < threshold:
+                similar_blocks.append((i, j))
+    
+    return similar_blocks
 
+def geometric_transform(block_coords, matches):
+    # Extract coordinates of matched keypoints in the two blocks
+    src_pts = []
+    dst_pts = []
+    for m in matches:
+        if m.queryIdx < len(block_coords) and m.trainIdx < len(block_coords):
+            src_pts.append(block_coords[m.queryIdx])
+            dst_pts.append(block_coords[m.trainIdx])
+    src_pts = np.float32(src_pts).reshape(-1,1,2)
+    dst_pts = np.float32(dst_pts).reshape(-1,1,2)
 
-# Function for calculating LBP
-def lbp_calculated_pixel(img, x, y):
-    center = img[x][y]
+    M = np.zeros((3,3))
+    # Compute the transformation matrix using RANSAC
+    if len(matches) >= 4:
+        M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
 
-    val_ar = []
+    block_coords = np.array(block_coords)
+    M = M.astype(np.float32)
+    # Apply the transformation to the detected block coordinates
+    transformed_block_coords = cv2.perspectiveTransform(block_coords.reshape(-1, 1, 2), M)
 
-    # top_left
-    val_ar.append(get_pixel(img, center, x - 1, y - 1))
+    return transformed_block_coords
 
-    # top
-    val_ar.append(get_pixel(img, center, x - 1, y))
+def get_block_desc(block_index, keypoints_list):
+    return keypoints_list[block_index]
 
-    # top_right
-    val_ar.append(get_pixel(img, center, x - 1, y + 1))
+def match_keypoints(des1, des2):
+    bf = cv2.BFMatcher()
+    
+    # Récupération des descripteurs de deux ensembles de keypoints kp1 et kp2
+    des1 = np.array(des1).astype(np.float32)
+    des2 = np.array(des2).astype(np.float32)
 
-    # right
-    val_ar.append(get_pixel(img, center, x, y + 1))
+    # Application de la méthode match() pour trouver les correspondances entre les descripteurs
+    matches = bf.match(des1, des2)
 
-    # bottom_right
-    val_ar.append(get_pixel(img, center, x + 1, y + 1))
-
-    # bottom
-    val_ar.append(get_pixel(img, center, x + 1, y))
-
-    # bottom_left
-    val_ar.append(get_pixel(img, center, x + 1, y - 1))
-
-    # left
-    val_ar.append(get_pixel(img, center, x, y - 1))
-
-    # Now, we need to convert binary
-    # values to decimal
-    power_val = [1, 2, 4, 8, 16, 32, 64, 128]
-
-    val = 0
-
-    for i in range(len(val_ar)):
-        val += val_ar[i] * power_val[i]
-
-    return val
-
-
-block_test_lbp = red_blocks[0]
-test_lbp = np.zeros((block_width, block_height), np.uint8)
-
-for i in range(0, block_height):
-    for j in range(0, block_width):
-        test_lbp[i, j] = lbp_calculated_pixel(block_test_lbp, i, j)
-
-block_red = []
-block_green = []
-block_blue = []
-block_red_lbp = np.zeros((block_width, block_height), np.uint8)
-block_green_lbp = np.zeros((block_width, block_height), np.uint8)
-block_blue_lbp = np.zeros((block_width, block_height), np.uint8)
-blocks_red_lbp = []
-blocks_green_lbp = []
-blocks_blue_lbp = []
-
-for i in range(0, number_blocks):
-    block_red = red_blocks[i]
-    block_green = green_blocks[i]
-    block_blue = blue_blocks[i]
-    for j in range(0, block_height):
-        for k in range(0, block_width):
-            block_red_lbp[j, k] = lbp_calculated_pixel(block_red, j, k)
-            block_green_lbp[j, k] = lbp_calculated_pixel(block_green, j, k)
-            block_blue_lbp[j, k] = lbp_calculated_pixel(block_blue, j, k)
-    blocks_red_lbp.append(block_red_lbp)
-    blocks_green_lbp.append(block_green_lbp)
-    blocks_blue_lbp.append(block_blue_lbp)
-
-print(blocks_red_lbp[0])
-#print(blocks_green_lbp)
-#print(blocks_blue_lbp)
-
-print("End of LBP...")
-
-print("Begin of histograms...")
-#Histograms
-histo_red = []
-histo_green = []
-histo_blue = []
-red_block_histo = []
-green_block_histo = []
-blue_block_histo = []
-
-
-for i in range(0, number_blocks):
-    histo_red = cv2.calcHist([blocks_red_lbp[i]], [0], None, [256], [0, 256])
-    RBH = np.concatenate(histo_red)
-    #RBH = RBH.tolist()
-    red_block_histo.append(RBH)
-
-    histo_green = cv2.calcHist([blocks_green_lbp[i]], [0], None, [256], [0, 256])
-    GBH = np.concatenate(histo_green)
-    #GBH = GBH.tolist()
-    green_block_histo.append(GBH)
-
-    histo_blue = cv2.calcHist([blocks_blue_lbp[i]], [0], None, [256], [0, 256])
-    BBH = np.concatenate(histo_blue)
-    #BBH = BBH.tolist()
-    blue_block_histo.append(BBH)
-
-print(red_block_histo)
-
-#0 = non correler / plus on se rapproche de 1, plus c'est correler / 1 = correler
-print("\n")
-result = cosine_distances(red_block_histo[0].reshape(1, -1), red_block_histo[25].reshape(1, -1))
-print(result)
-
-
-print("End of computing histograms...")
-
-
-print("Primary candidate selection...")
-#Primary candidate selection
-
-print(number_blocks)
+    return matches
 
 
 
 
 
+for i in range(num_rows):
+    for j in range(num_cols):
+        top = i*overlap_size[1]
+        left = j*overlap_size[0]
+
+        bottom = min(top + block_size[1], ndg_suspicious_image.shape[0])
+        right = min(left + block_size[0], ndg_suspicious_image.shape[1])
+
+        block = ndg_suspicious_image[top:bottom, left:right]
+
+        hist = get_lbp_features(block, 1, 8)
+        LBP_features.append(hist)
+
+        keypoints, descriptors = sift.detectAndCompute(block, None)
+        block_keypoints.append(keypoints)
+        block_descriptors.append(descriptors)
+
+        #cv2.rectangle(ndg_suspicious_image, (left, top), (right, bottom), 128, 2)
+
+        blocks[i, j, :bottom-top, :right-left] = ndg_suspicious_image[top:bottom, left:right]
+
+#plt.bar(range(len(LBP_features[1])), LBP_features[1])
+#plt.savefig('data/histogramme_block_1.png')
+
+LBP_features_array = np.array(LBP_features)
+similar_blocks = block_matching(LBP_features_array, 0.02)
+
+for blocks in similar_blocks:
+    block_coords = blocks
+    des1 = get_block_desc(block_coords[0], block_descriptors)
+    des2 = get_block_desc(block_coords[1], block_descriptors)
+    matched_keypoints = match_keypoints(des1, des2)
+    transformed_block_coords = geometric_transform(block_coords, matched_keypoints)
 
 
-#Neighbourhood clustering
+'''
+for kp in keypoints:
+    x, y = kp.pt
+    x += left
+    y += top
+    cv2.circle(ndg_suspicious_image, (int(x), int(y)), 2, (0, 0, 255), -1)
+
+cv2.imshow('Grid Image with Keypoints', ndg_suspicious_image)
+cv2.waitKey(0)
+'''
