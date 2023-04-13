@@ -1,3 +1,11 @@
+'''
+*****************************************************************************************************************************
+BROUILLON
+*****************************************************************************************************************************
+'''
+
+
+
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
@@ -5,7 +13,7 @@ from sklearn.cluster import KMeans
 from scipy.spatial.distance import euclidean
 
 #Passage de l'image en nuances de gris
-suspicious_image = cv2.imread('data/zebres_forgery.png')
+suspicious_image = cv2.imread('data/moutons_truquee.png')
 ndg_suspicious_image = cv2.cvtColor(suspicious_image, cv2.COLOR_BGR2GRAY)
 
 block_size = (64, 64)
@@ -112,22 +120,46 @@ def geometric_transform(block_coords, matches):
 
     return transformed_block_coords
 
-def get_block_desc(block_index, keypoints_list):
+def get_block_desc(block_index, descriptors_list):
+    return descriptors_list[block_index]
+
+def get_block_keypoints(block_index, keypoints_list):
     return keypoints_list[block_index]
 
-def match_keypoints(des1, des2):
+def match_keypoints(desc1, desc2):
     bf = cv2.BFMatcher()
     
     # Récupération des descripteurs de deux ensembles de keypoints kp1 et kp2
-    des1 = np.array(des1).astype(np.float32)
-    des2 = np.array(des2).astype(np.float32)
+    desc1 = np.array(desc1).astype(np.float32)
+    desc2 = np.array(desc2).astype(np.float32)
 
     # Application de la méthode match() pour trouver les correspondances entre les descripteurs
-    matches = bf.match(des1, des2)
+    matches = bf.match(desc1, desc2)
 
     return matches
 
 
+def ransac_homography(matches, kp1, kp2, thresh=4):
+    # Get the keypoints from the matches
+    src_pts = np.float32([kp1[m.queryIdx].pt for m in matches]).reshape(-1, 1, 2)
+    dst_pts = np.float32([kp2[m.trainIdx].pt for m in matches]).reshape(-1, 1, 2)
+    mask = None
+    M = None
+    inliers = np.empty((0, 2), dtype=int)
+    outliers = np.empty((0, 2), dtype=int)
+
+    # Apply RANSAC algorithm to estimate homography
+    if mask is None:
+        mask = np.ones(len(matches), dtype=np.uint8)
+
+    if len(matches) >= 4:
+        M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, thresh)
+    
+    # Find the inliers and outliers
+    inliers = np.argwhere(mask.ravel() == 1)
+    outliers = np.argwhere(mask.ravel() == 0)
+    
+    return M, inliers, outliers
 
 
 
@@ -156,8 +188,53 @@ for i in range(num_rows):
 #plt.savefig('data/histogramme_block_1.png')
 
 LBP_features_array = np.array(LBP_features)
-similar_blocks = block_matching(LBP_features_array, 0.02)
+similar_blocks = block_matching(LBP_features_array, 0.1)
 
+for blocks in similar_blocks:
+    #recupere les point cles des deux blocs de la paire
+    desc1 = get_block_desc(blocks[0], block_descriptors)
+    desc2 = get_block_desc(blocks[1], block_descriptors)
+
+    kp1 = get_block_keypoints(blocks[0], block_keypoints)
+    kp2 = get_block_keypoints(blocks[1], block_keypoints)
+
+    #recupere le point cles qui matchent entre les deux blocs
+    matched_keypoints = match_keypoints(desc1, desc2)
+
+    M, inliers, outliers = ransac_homography(matched_keypoints, kp1, kp2, 10)
+    
+    inlier_idxs = np.where(inliers)[0]
+    inlier_coords1 = np.float32([kp1[matched_keypoints[i].queryIdx].pt for i in inlier_idxs if matched_keypoints[i].queryIdx < len(kp1)])
+    inlier_coords2 = np.float32([kp2[matched_keypoints[i].trainIdx].pt for i in inlier_idxs if matched_keypoints[i].trainIdx < len(kp2)])
+
+        
+for i in range(len(inlier_coords1)):
+    pt1 = inlier_coords1[i]
+    pt1 = pt1.astype(np.int32)
+    pt1 = tuple(pt1)
+    print(pt1)
+    pt2 = inlier_coords2[i]
+    pt2 = pt2.astype(np.int32)
+    pt2 = tuple(pt2)
+    print(pt1)
+    cv2.circle(ndg_suspicious_image, pt1, 3, (255, 0, 0), -1)
+    cv2.circle(ndg_suspicious_image, pt2, 3, (255, 0, 0), -1)
+
+
+cv2.imshow('IMAGE FALSFIEE', ndg_suspicious_image)
+cv2.waitKey()
+cv2.destroyAllWindows()
+
+
+
+
+
+
+
+
+
+
+'''
 for blocks in similar_blocks:
     block_coords = blocks
     des1 = get_block_desc(block_coords[0], block_descriptors)
@@ -166,7 +243,7 @@ for blocks in similar_blocks:
     transformed_block_coords = geometric_transform(block_coords, matched_keypoints)
 
 
-'''
+
 for kp in keypoints:
     x, y = kp.pt
     x += left
