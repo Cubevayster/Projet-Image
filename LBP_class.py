@@ -12,28 +12,27 @@ class LocBinPatt:
     largeur = 0
     nb_blocs_hauteur = 0
     nb_blocs_largeur = 0
-    taille_bloc = 32
     image = None
     blocs = []
     keypoint_block = []
 
     @classmethod
-    def decoupe_image_en_blocs(self, image_path):
+    def decoupe_image_en_blocs(self, image_path, taille_bloc):
         cpt = 0
         self.image = cv2.imread(image_path)
         self.image = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
 
         self.hauteur, self.largeur = self.image.shape[:2]
 
-        self.nb_blocs_largeur = int(self.largeur/self.taille_bloc)
-        self.nb_blocs_hauteur = int(self.hauteur/self.taille_bloc)
+        self.nb_blocs_largeur = int(self.largeur/taille_bloc)
+        self.nb_blocs_hauteur = int(self.hauteur/taille_bloc)
 
         for j in range(self.nb_blocs_hauteur):
             for i in range(self.nb_blocs_largeur):
-                x = i*self.taille_bloc
-                y = j*self.taille_bloc
+                x = i*taille_bloc
+                y = j*taille_bloc
 
-                bloc = self.image[y:y+self.taille_bloc, x:x+self.taille_bloc]
+                bloc = self.image[y:y+taille_bloc, x:x+taille_bloc]
 
                 self.blocs.append(bloc)
                 cpt += 1
@@ -41,25 +40,25 @@ class LocBinPatt:
         return self.blocs
 
     @classmethod
-    def dessiner_grille(self):
+    def dessiner_grille(self, output_path, taille_bloc):
         grille = np.zeros((self.hauteur, self.largeur), dtype=np.uint8)
         for j in range(self.nb_blocs_hauteur):
             for i in range(self.nb_blocs_largeur):
-                x = i*self.taille_bloc
-                y = j*self.taille_bloc
+                x = i*taille_bloc
+                y = j*taille_bloc
 
-                grille[y:y+self.taille_bloc, x:x +
-                       self.taille_bloc] = self.blocs[j*self.nb_blocs_largeur+i]
-                cv2.rectangle(grille, (x, y), (x+self.taille_bloc,
-                              y+self.taille_bloc), (255, 255, 255), 1)
+                grille[y:y+taille_bloc, x:x +
+                       taille_bloc] = self.blocs[j*self.nb_blocs_largeur+i]
+                cv2.rectangle(grille, (x, y), (x+taille_bloc,
+                              y+taille_bloc), (255, 255, 255), 1)
 
         img_grille = cv2.addWeighted(self.image, 0.5, grille, 0.5, 0)
-        cv2.imwrite('data/image_blocs.png', img_grille)
+        cv2.imwrite(output_path, img_grille)
 
     @classmethod
-    def compute_and_draw_grid(self, image_path):
-        self.blocs = self.decoupe_image_en_blocs(image_path)
-        self.dessiner_grille()
+    def compute_and_draw_grid(self, image_path, output_path, taille_bloc):
+        self.blocs = self.decoupe_image_en_blocs(image_path, taille_bloc)
+        self.dessiner_grille(output_path, taille_bloc)
 
     @classmethod
     def compute_and_draw_keypoints(self, image_path):
@@ -94,8 +93,7 @@ class LocBinPatt:
         return lbp_descriptors
 
     @classmethod
-    def compare_lbp_desc(self, image_path):
-        threshold = 0.1
+    def compare_lbp_desc(self, image_path, threshold):
         matches = []
         self.blocs = self.decoupe_image_en_blocs(image_path)
         #print(len(self.blocs))
@@ -103,18 +101,18 @@ class LocBinPatt:
         for i in range(0, len(self.blocs)):
             for j in range(i+1, len(self.blocs)):
                 dist = distance.euclidean(lbp_desc[i], lbp_desc[j])
-                print(dist)
+                #print(dist)
                 if dist < threshold:
                     matches.append((i,j))
-        print(matches)
+        #print(matches)
         
         return matches   
 
     @classmethod
-    def mark_copy_moved_regions(self, matches):
+    def mark_copy_moved_regions(self, matches, output_path):
         for match in matches:
             x1, y1 = match
 
             cv2.rectangle(self.image, (x1*self.taille_bloc, y1*self.taille_bloc), (x1*self.taille_bloc + self.taille_bloc, y1*self.taille_bloc + self.taille_bloc), (0, 0, 255), 2)
 
-            cv2.imwrite('data/img_finale.png', self.image)
+        cv2.imwrite(output_path, self.image)
