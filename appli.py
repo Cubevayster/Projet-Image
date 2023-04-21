@@ -78,9 +78,9 @@ class MyWindow(Tk):
         menu_analyse = Menu(menu_bar, tearoff=0)
         menu_analyse.add_command(label="Sift data", command=self.siftclustering_analysis)
         #menu_analyse.add_command(label="LBP data", command=self.lbp_analysis)
-        #menu_analyse.add_command(label="Sift resultats", command=self.siftclustering_analysis_res)
+        menu_analyse.add_command(label="Sift resultats", command=self.siftclustering_analysis_res)
         #menu_analyse.add_command(label="LBP resultats", command=self.lbp_analysis_res)
-        #menu_analyse.add_command(label="Sift complxite", command=self.siftclustering_analysis_comp)
+        menu_analyse.add_command(label="Sift complxite", command=self.siftclustering_analysis_comp)
         #menu_analyse.add_command(label="LBP complexite", command=self.lbp_analysis_comp)
         menu_bar.add_cascade(label = "Analyse detection results", menu=menu_analyse)
 
@@ -119,10 +119,10 @@ class MyWindow(Tk):
             self.output = dialog.filename
             image = cv2.imread(self.file)
             sift = SiftClustering()
-            self.last_sift_res, self.exec_time, self.mem_used, self.peak_mem = measure(sift.detectCopyMove, image, self.output, dialog.threshold)
+            self.last_sift_res, self.exec_time, self.mem_used, self.peak_mem = measure(sift.detectCopyMove, image, self.output, float(dialog.thresh))
             self.charge_image(self.output, 550, 10)
             self.update_sift(self.last_sift_res, answer)
-            write_result("data_sift.json", self.sift_clean, dialog.threshold, self.sift_vp, self.sift_vn, self.sift_fn, self.sift_fp, self.exec_time, self.mem_used, self.peak_mem)
+            write_result("data_sift.json", self.sift_clean, float(dialog.thresh), self.sift_vp, self.sift_vn, self.sift_fn, self.sift_fp, self.exec_time, self.mem_used, self.peak_mem)
             self.sift_clean = False
     
     #Met a jour les resultats analyse sift
@@ -134,6 +134,12 @@ class MyWindow(Tk):
 
     def siftclustering_analysis(self):
         plot_from_file("data_sift.json")
+
+    def siftclustering_analysis_res(self):
+        plot_resultats("data_sift.json")
+    
+    def siftclustering_analysis_comp(self):
+        plot_complexite("data_sift.json")
 
     def do_something(self):
         print("Menu clicked")
