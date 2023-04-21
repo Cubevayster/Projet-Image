@@ -10,104 +10,99 @@ import glob
 import os
 import math
 
-orb = cv2.ORB_create(1000)
-matcher = cv2.DescriptorMatcher_create(
-    cv2.DescriptorMatcher_BRUTEFORCE_HAMMING)
 
+class ORB_DOG:
 
-def sobel(image):
-    inputImage = image.astype(int)
-    dx = ndimage.sobel(inputImage, 1)
-    dy = ndimage.sobel(inputImage, 0)
-    mag = np.hypot(dx, dy)
-    mag *= 255.0 / np.max(mag)
-    sobelImage = np.uint8(mag)
-    return sobelImage
+    orb = cv2.ORB_create(1000)
+    matcher = cv2.DescriptorMatcher_create(
+        cv2.DescriptorMatcher_BRUTEFORCE_HAMMING)
 
+    @classmethod
+    def sobel(self, image):
+        inputImage = image.astype(int)
+        dx = ndimage.sobel(inputImage, 1)
+        dy = ndimage.sobel(inputImage, 0)
+        mag = np.hypot(dx, dy)
+        mag *= 255.0 / np.max(mag)
+        sobelImage = np.uint8(mag)
+        return sobelImage
 
-def dog(greyImage):
-    blobs_dog = blob_dog(greyImage, max_sigma=100, threshold=.05)
-    blobs_dog[:, 2] = blobs_dog[:, 2] * sqrt(2)
-    return blobs_dog
+    @classmethod
+    def dog(self, greyImage, max_sigma, threshold):
+        blobs_dog = blob_dog(greyImage, max_sigma=max_sigma, threshold=threshold)
+        blobs_dog[:, 2] = blobs_dog[:, 2] * sqrt(2)
+        return blobs_dog
 
+    @classmethod
+    def show(self, blobs_all):
+        blob_area = []
+        blobs_list = [blobs_all]
+        for blobs in blobs_list:
+            for blob in blobs:
+                y, x, r = blob
+                area = [y, x, r]
+                if 2*r > 1:
+                    blob_area.append(area)
+        return blob_area
 
-def show(blobs_all):
-    blob_area = []
-    blobs_list = [blobs_all]
-    for blobs in blobs_list:
-        for blob in blobs:
-            y, x, r = blob
-            area = [y, x, r]
-            if 2*r > 1:
-                # print area
-                blob_area.append(area)
-    return blob_area
+    @classmethod
+    def detectCopyMove(self, image, max_sigma, threshold, min_match_count, output_path):
+        sobelImage = self.sobel(image)
+        sobelImageGrey = cv2.cvtColor(sobelImage, cv2.COLOR_BGR2GRAY)
+        imageGrey = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
+        blobs_all = self.dog(sobelImageGrey, max_sigma, threshold)
+        output = self.show(blobs_all)
 
-if __name__=='__main__':
-    start_time = datetime.now()
-    image = cv2.imread('data/iran.png')
-    sobelImage = sobel(image)
-    sobelImageGrey = cv2.cvtColor(sobelImage, cv2.COLOR_BGR2GRAY)
-    imageGrey = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        imageClone = image.copy()
+        key, des = self.orb.detectAndCompute(imageGrey, None)
 
-    blobs_all = dog(sobelImageGrey)
-    output = show(blobs_all)
+        src = np.array([]).reshape(-1, 1, 2)
+        dst = np.array([]).reshape(-1, 1, 2)
 
-    imageClone = image.copy()
-    key, des = orb.detectAndCompute(imageGrey, None)
+        liste1 = []
+        for blob in range(0, len(output)):
+            bloby, blobx, blobr = output[blob]
+            cv2.circle(imageClone, (int(blobx), int(bloby)), int(blobr), (255, 0, 0), 1)
+            liste2 = []
+            kp1 = []
+            ds1 = []
+            liste3 = []
+            index = 0
 
-    src = np.array([]).reshape(-1, 1, 2)
-    dst = np.array([]).reshape(-1, 1, 2)
+            for k,d in zip(key, des):
+                if (k.pt[0] - blobx)**2 + (k.pt[1] - bloby)**2 <= (blobr**2):
+                    liste2.append(index)
+                    kp1.append(k)
+                    ds1.append(d)
+                index += 1
 
-    geom = 0
+            if liste2:
+                kp2 = np.delete(key, liste2, axis=0)
+                ds2 = np.delete(des, liste2, axis=0)
+                nnMatches = self.matcher.knnMatch(np.array(ds1), ds2, 2)
 
-    liste1 = []
-    for blob in range(0, len(output)):
-        bloby, blobx, blobr = output[blob]
-        cv2.circle(imageClone, (int(blobx), int(bloby)), int(blobr), (255, 0, 0), 1)
-        liste2 = []
-        kp1 = []
-        ds1 = []
-        liste3 = []
-        index = 0
+                goodMatch = []
 
-        for k,d in zip(key, des):
-            if (k.pt[0] - blobx)**2 + (k.pt[1] - bloby)**2 <= (blobr**2):
-                liste2.append(index)
-                kp1.append(k)
-                ds1.append(d)
-            index += 1
+                nnMatchRatio = 0.6
 
-        if liste2:
-            kp2 = np.delete(key, liste2, axis=0)
-            ds2 = np.delete(des, liste2, axis=0)
-            nnMatches = matcher.knnMatch(np.array(ds1), ds2, 2)
+                for m,n in nnMatches:
+                    if m.distance < nnMatchRatio * n.distance:
+                        goodMatch.append(m)
 
-            goodMatch = []
+    
+                if len(goodMatch) > min_match_count:
+                    srcPoints = np.float32([kp1[m.queryIdx].pt for m in goodMatch]).reshape(-1, 1, 2)
+                    dstPoints = np.float32([kp2[m.trainIdx].pt for m in goodMatch]).reshape(-1, 1, 2)
+                    src = np.array(srcPoints).ravel()
+                    dst = np.array(dstPoints).ravel()
 
-            nnMatchRatio = 0.6
+                    ps = np.array(src).reshape((-1, 2))
+                    pd = np.array(dst).reshape((-1, 2))
 
-            for m,n in nnMatches:
-                if m.distance < nnMatchRatio * n.distance:
-                    goodMatch.append(m)
+                    for k1, k2 in zip(ps, pd):
+                        cv2.circle(imageClone, (int(k1[0]), int(k1[1])), 4, (255, 0, 0), -1)
+                        cv2.circle(imageClone, (int(k2[0]), int(k2[1])), 4, (0, 0, 255), -1)
+                        cv2.line(imageClone,(int(k1[0]),int(k1[1])),(int(k2[0]),int(k2[1])),(0,255,0),2)   
 
-            
-            MIN_MATCH_COUNT = 0
-            if len(goodMatch) > MIN_MATCH_COUNT:
-                srcPoints = np.float32([kp1[m.queryIdx].pt for m in goodMatch]).reshape(-1, 1, 2)
-                dstPoints = np.float32([kp2[m.trainIdx].pt for m in goodMatch]).reshape(-1, 1, 2)
-                src = np.array(srcPoints).ravel()
-                dst = np.array(dstPoints).ravel()
-
-                ps = np.array(src).reshape((-1, 2))
-                pd = np.array(dst).reshape((-1, 2))
-
-                for k1, k2 in zip(ps, pd):
-                    cv2.circle(imageClone, (int(k1[0]), int(k1[1])), 4, (255, 0, 0), -1)
-                    cv2.circle(imageClone, (int(k2[0]), int(k2[1])), 4, (0, 0, 255), -1)
-                    cv2.line(imageClone,(int(k1[0]),int(k1[1])),(int(k2[0]),int(k2[1])),(0,255,0),2)   
-
-cv2.imwrite('Resultats/iran_orbdog_detection.png', imageClone)
-end_time = datetime.now()
-print('Duartion: {}'.format(end_time - start_time))
+        cv2.imwrite(output_path, imageClone)

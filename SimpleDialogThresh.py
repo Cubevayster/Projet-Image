@@ -26,6 +26,6 @@ class threshdialog(sd.Dialog):
 
     # Fonction pour ouvrir la boîte de dialogue personnalisée
     def open_dialog(self):
-        d = MyDialog(self)
+        d = threshdialog(self)
         print("Threshold:", d.threshold)
         print("Filename:", d.filename)

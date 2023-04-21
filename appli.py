@@ -5,12 +5,14 @@ import tkinter.simpledialog as sd
 from SIFT import SiftClustering
 from LBP_class import LocBinPatt
 from pretraitement import PreProcessing
-from SimpleDialog import mydialog
-from simpledialog import MyDialog
+from SimpleDialogBlock import mydialog
+from SimpleDialogBlockThresh import MyDialog
 from SimpleDialogThresh import threshdialog
+from SimpleDialogSigmaThresh import SigmaThreshDialog
 import cv2
 from PIL import Image
 from Analyse import *
+from DoG_ORB import ORB_DOG
 
 
 class MyWindow(Tk):
@@ -70,7 +72,7 @@ class MyWindow(Tk):
         menu_detect = Menu(menu_bar, tearoff=0)
         menu_detect.add_command(label="Sift clustering", command=self.siftclustering)
         menu_detect.add_command(label="LBP operator", command=self.lbp)
-        menu_detect.add_command(label="Keypoints", command=self.contours)
+        menu_detect.add_command(label="DOG-ORB", command=self.dog_orb)
         menu_bar.add_cascade(label = "Forgeries detection", menu=menu_detect)
 
         menu_analyse = Menu(menu_bar, tearoff=0)
@@ -84,13 +86,14 @@ class MyWindow(Tk):
 
         self.config(menu=menu_bar)
 
+    #Ouvre un fichier depuis la machine
     def open_file(self):
         self.file = askopenfilename(title="Choose the file to open",
                                filetypes=[("PNG image", ".png")])
         if self.file:
             self.charge_image(self.file, 10, 10)
 
-
+    #Charge image associee au fichier
     def charge_image(self, image_path, x, y):
         global image
         image = Image.open(image_path)
@@ -100,6 +103,7 @@ class MyWindow(Tk):
         affichage = canvas.create_image(0, 0, image = image, anchor=NW)
         canvas.image = image
 
+    #Detecte les copy move forgeries part SIFT et clusters
     def siftclustering(self):
         dialog = threshdialog(self)
         answer = messagebox.askyesnocancel("Question", "Do you want an analysis about the results?")
@@ -121,6 +125,7 @@ class MyWindow(Tk):
             write_result("data_sift.json", self.sift_clean, dialog.threshold, self.sift_vp, self.sift_vn, self.sift_fn, self.sift_fp, self.exec_time, self.mem_used, self.peak_mem)
             self.sift_clean = False
     
+    #Met a jour les resultats analyse sift
     def update_sift(self, res, expected):
         if res == expected and res == True : self.sift_vp += 1
         elif res == expected and res == False : self.sift_vn += 1
@@ -133,6 +138,7 @@ class MyWindow(Tk):
     def do_something(self):
         print("Menu clicked")
     
+    #Calcule les contours image
     def contours(self):
         filename = sd.askstring("Nom du fichier", "Entrer un nom de fichier", parent=self, show='')
         if filename is None:
@@ -144,6 +150,7 @@ class MyWindow(Tk):
             Contours.contours(image, self.output)
             self.charge_image(self.output, 550, 10)
 
+    #Convertis image en nuances de gris
     def ndg(self):
         filename = sd.askstring("Nom du fichier", "Entrer un nom de fichier", parent=self, show='')
         if filename is None:
@@ -155,6 +162,7 @@ class MyWindow(Tk):
             NDG.ndg(image, self.output)
             self.charge_image(self.output, 550, 10)
 
+    #Decoupe image en blocs
     def block(self):
         dialog = mydialog(self)
         if dialog.filename is None:
@@ -165,6 +173,7 @@ class MyWindow(Tk):
             LBP.compute_and_draw_grid(self.file, self.output, dialog.block)
             self.charge_image(self.output, 550, 10)
     
+    #Detecte les copy move forgeries en utilisant LBP
     def lbp(self):
         dialog = MyDialog(self)
         answer = messagebox.askyesnocancel("Question", "Do you want an analysis about the results?")
@@ -177,6 +186,18 @@ class MyWindow(Tk):
             LBP.mark_copy_moved_regions(matches, self.output, dialog.taille_bloc)
             self.charge_image(self.output, 550, 10)
 
+    #Detecte les copy move forgeries en utilisant ORB et DoG
+    def dog_orb(self):
+        dialog = SigmaThreshDialog(self)
+        answer = messagebox.askyesnocancel("Question", "Do you want an analysis about the results?")
+        if dialog.filename is None:
+            return None
+        else:
+            self.output = dialog.filename
+            OG = ORB_DOG()
+            image = cv2.imread(self.file)
+            OG.detectCopyMove(image, dialog.sigma, dialog.thresh, dialog.minMatch, self.output)
+            self.charge_image(self.output, 550, 10)
     
     def do_about(self):
         messagebox.showinfo("My title", "My message")

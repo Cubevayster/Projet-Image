@@ -27,6 +27,6 @@ class mydialog(sd.Dialog):
 
     # Fonction pour ouvrir la boîte de dialogue personnalisée
     def open_dialog(self):
-        d = MyDialog(self)
+        d = mydialog(self)
         print("Block size:", d.block)
         print("Filename:", d.filename)
