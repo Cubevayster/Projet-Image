@@ -89,7 +89,7 @@ class SiftClustering:
         plt.clf()
 
     @classmethod
-    def detectCopyMove(self, image, title):
+    def detectCopyMove(self, image, title, th):
         kp, desc = self.caracteristicsExtraction(image)
         p1, p2 = self.matchingPoints(kp, desc)
         # showImage(image)x
@@ -98,7 +98,9 @@ class SiftClustering:
             # print("No tampering was found")
             return False
 
-        clusters, p1, p2 = self.clustering(p1, p2, 'ward', 2.2)
+        if th is None : th = float(2.2)
+        
+        clusters, p1, p2 = self.clustering(p1, p2, 'ward', th)
 
         if len(clusters) == 0 or len(p1) == 0 or len(p2) == 0:
             # print("No tampering was found")

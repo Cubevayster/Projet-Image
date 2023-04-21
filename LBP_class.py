@@ -93,9 +93,9 @@ class LocBinPatt:
         return lbp_descriptors
 
     @classmethod
-    def compare_lbp_desc(self, image_path, threshold):
+    def compare_lbp_desc(self, image_path, threshold, taille_bloc):
         matches = []
-        self.blocs = self.decoupe_image_en_blocs(image_path)
+        self.blocs = self.decoupe_image_en_blocs(image_path, taille_bloc)
         #print(len(self.blocs))
         lbp_desc = self.compute_lbp_per_block(image_path)
         for i in range(0, len(self.blocs)):
@@ -109,10 +109,10 @@ class LocBinPatt:
         return matches   
 
     @classmethod
-    def mark_copy_moved_regions(self, matches, output_path):
+    def mark_copy_moved_regions(self, matches, output_path, taille_bloc):
         for match in matches:
             x1, y1 = match
 
-            cv2.rectangle(self.image, (x1*self.taille_bloc, y1*self.taille_bloc), (x1*self.taille_bloc + self.taille_bloc, y1*self.taille_bloc + self.taille_bloc), (0, 0, 255), 2)
+            cv2.rectangle(self.image, (x1*taille_bloc, y1*taille_bloc), (x1*taille_bloc + taille_bloc, y1*taille_bloc + taille_bloc), (0, 0, 255), 2)
 
         cv2.imwrite(output_path, self.image)

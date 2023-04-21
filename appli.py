@@ -7,8 +7,10 @@ from LBP_class import LocBinPatt
 from pretraitement import PreProcessing
 from SimpleDialog import mydialog
 from simpledialog import MyDialog
+from SimpleDialogThresh import threshdialog
 import cv2
 from PIL import Image
+from Analyse import *
 
 
 class MyWindow(Tk):
@@ -22,6 +24,18 @@ class MyWindow(Tk):
         self.configure(bg = "black")
         self.file = " "
         self.output = " "
+
+        self.sift_vp = 0
+        self.sift_vn = 0
+        self.sift_fp = 0
+        self.sift_fn = 0
+        self.sift_clean = True
+
+        self.lbp_vp = 0
+        self.lbp_vn = 0
+        self.lbp_fp = 0
+        self.lbp_fn = 0
+        self.lbp_clean = True
 
     def create_menu_bar(self):
         menu_bar = Menu(self)
@@ -59,6 +73,15 @@ class MyWindow(Tk):
         menu_detect.add_command(label="Keypoints", command=self.contours)
         menu_bar.add_cascade(label = "Forgeries detection", menu=menu_detect)
 
+        menu_analyse = Menu(menu_bar, tearoff=0)
+        menu_analyse.add_command(label="Sift data", command=self.siftclustering_analysis)
+        #menu_analyse.add_command(label="LBP data", command=self.lbp_analysis)
+        #menu_analyse.add_command(label="Sift resultats", command=self.siftclustering_analysis_res)
+        #menu_analyse.add_command(label="LBP resultats", command=self.lbp_analysis_res)
+        #menu_analyse.add_command(label="Sift complxite", command=self.siftclustering_analysis_comp)
+        #menu_analyse.add_command(label="LBP complexite", command=self.lbp_analysis_comp)
+        menu_bar.add_cascade(label = "Analyse detection results", menu=menu_analyse)
+
         self.config(menu=menu_bar)
 
     def open_file(self):
@@ -78,15 +101,34 @@ class MyWindow(Tk):
         canvas.image = image
 
     def siftclustering(self):
-        filename = sd.askstring("Nom du fichier", "Entrer un nom de fichier", parent=self, show='')
-        if filename is None:
+        dialog = threshdialog(self)
+        answer = messagebox.askyesnocancel("Question", "Do you want an analysis about the results?")
+        if dialog.filename is None:
             return None
-        else:  
-            self.output = filename  
+        elif dialog.filename is not None and not answer:  
+            self.output = dialog.filename  
             image = cv2.imread(self.file)
             sift = SiftClustering()
-            sift.detectCopyMove(image, self.output)
+            sift.detectCopyMove(image, self.output, dialog.threshold)
             self.charge_image(self.output, 550, 10)
+        else:
+            self.output = dialog.filename
+            image = cv2.imread(self.file)
+            sift = SiftClustering()
+            self.last_sift_res, self.exec_time, self.mem_used, self.peak_mem = measure(sift.detectCopyMove, image, self.output, dialog.threshold)
+            self.charge_image(self.output, 550, 10)
+            self.update_sift(self.last_sift_res, answer)
+            write_result("data_sift.json", self.sift_clean, dialog.threshold, self.sift_vp, self.sift_vn, self.sift_fn, self.sift_fp, self.exec_time, self.mem_used, self.peak_mem)
+            self.sift_clean = False
+    
+    def update_sift(self, res, expected):
+        if res == expected and res == True : self.sift_vp += 1
+        elif res == expected and res == False : self.sift_vn += 1
+        elif res != expected and res == True : self.sift_fp += 1
+        elif res != expected and res == False : self.sift_fn += 1
+
+    def siftclustering_analysis(self):
+        plot_from_file("data_sift.json")
 
     def do_something(self):
         print("Menu clicked")
@@ -125,13 +167,14 @@ class MyWindow(Tk):
     
     def lbp(self):
         dialog = MyDialog(self)
+        answer = messagebox.askyesnocancel("Question", "Do you want an analysis about the results?")
         if dialog.filename is None:
             return None
         else:  
             self.output = dialog.filename  
             LBP = LocBinPatt()
-            matches = LBP.compare_lbp_desc(self.file, dialog.thresh)
-            LBP.mark_copy_moved_regions(matches, self.output)
+            matches = LBP.compare_lbp_desc(self.file, dialog.thresh, dialog.taille_bloc)
+            LBP.mark_copy_moved_regions(matches, self.output, dialog.taille_bloc)
             self.charge_image(self.output, 550, 10)
 
     
