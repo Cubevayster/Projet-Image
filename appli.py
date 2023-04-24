@@ -113,6 +113,7 @@ class MyWindow(Tk):
         affichage = canvas.create_image(0, 0, image = image, anchor=NW)
         canvas.image = image
 
+    
     #Detecte les copy move forgeries part SIFT et clusters
     def siftclustering(self):
         dialog = threshdialog(self)
@@ -134,6 +135,7 @@ class MyWindow(Tk):
             self.update_sift(self.last_sift_res, answer)
             write_result("data_sift.json", self.sift_clean, float(dialog.thresh), self.sift_vp, self.sift_vn, self.sift_fn, self.sift_fp, self.exec_time, self.mem_used, self.peak_mem)
             self.sift_clean = False
+    
     
     #Met a jour les resultats analyse sift
     def update_sift(self, res, expected):
