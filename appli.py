@@ -39,6 +39,12 @@ class MyWindow(Tk):
         self.lbp_fn = 0
         self.lbp_clean = True
 
+        self.orb_vp = 0
+        self.orb_vn = 0
+        self.orb_fp = 0
+        self.orb_fn = 0
+        self.orb_clean = True
+
     def create_menu_bar(self):
         menu_bar = Menu(self)
 
@@ -64,9 +70,10 @@ class MyWindow(Tk):
 
         menu_process = Menu(menu_bar, tearoff=0)
         menu_process.add_command(label="Detect contours", command=self.contours)
-        menu_process.add_command(label="Threshold", command=self.contours)
+        menu_process.add_command(label="Keypoints", command=self.keypoints)
         menu_process.add_command(label="Grayscale", command=self.ndg)
         menu_process.add_command(label="Blocks", command=self.block)
+        menu_process.add_command(label="Sobel", command=self.sobel_filter)
         menu_bar.add_cascade(label = "Image processing", menu=menu_process)
 
         menu_detect = Menu(menu_bar, tearoff=0)
@@ -77,11 +84,14 @@ class MyWindow(Tk):
 
         menu_analyse = Menu(menu_bar, tearoff=0)
         menu_analyse.add_command(label="Sift data", command=self.siftclustering_analysis)
-        #menu_analyse.add_command(label="LBP data", command=self.lbp_analysis)
+        menu_analyse.add_command(label="LBP data", command=self.lbp_analysis)
+        menu_analyse.add_command(label="ORB-DOG data", command=self.orb_analysis)
         menu_analyse.add_command(label="Sift resultats", command=self.siftclustering_analysis_res)
-        #menu_analyse.add_command(label="LBP resultats", command=self.lbp_analysis_res)
-        menu_analyse.add_command(label="Sift complxite", command=self.siftclustering_analysis_comp)
-        #menu_analyse.add_command(label="LBP complexite", command=self.lbp_analysis_comp)
+        menu_analyse.add_command(label="LBP resultats", command=self.lbp_analysis_res)
+        menu_analyse.add_command(label="ORB-DOG resultats", command=self.orb_analysis_res)
+        menu_analyse.add_command(label="Sift complexite", command=self.siftclustering_analysis_comp)
+        menu_analyse.add_command(label="LBP complexite", command=self.lbp_analysis_comp)
+        menu_analyse.add_command(label="ORB-DOG complexite", command=self.orb_analysis_comp)
         menu_bar.add_cascade(label = "Analyse detection results", menu=menu_analyse)
 
         self.config(menu=menu_bar)
@@ -178,19 +188,70 @@ class MyWindow(Tk):
             LBP = LocBinPatt()
             LBP.compute_and_draw_grid(self.file, self.output, dialog.block)
             self.charge_image(self.output, 550, 10)
-    
+
+    #Dessine les points cle de limage
+    def keypoints(self):
+        filename = sd.askstring("Nom du fichier", "Entrer un nom de fichier", parent=self, show='')
+        if filename is None:
+            return None
+        else:  
+            self.output = filename  
+            image = cv2.imread(self.file)
+            KP = PreProcessing()
+            KP.keypoints(image, self.output)
+            self.charge_image(self.output, 550, 10)
+
+    #Applique sobel sur limage
+    def sobel_filter(self):
+        filename = sd.askstring("Nom du fichier", "Entrer un nom de fichier", parent=self, show='')
+        if filename is None:
+            return None
+        else:  
+            self.output = filename  
+            image = cv2.imread(self.file)
+            SOBEL = PreProcessing()
+            SOBEL.sobel(image, self.output)
+            self.charge_image(self.output, 550, 10)
+
+ 
     #Detecte les copy move forgeries en utilisant LBP
     def lbp(self):
         dialog = MyDialog(self)
         answer = messagebox.askyesnocancel("Question", "Do you want an analysis about the results?")
         if dialog.filename is None:
             return None
-        else:  
+        elif dialog.filename is not None and not answer:  
             self.output = dialog.filename  
             LBP = LocBinPatt()
             matches = LBP.compare_lbp_desc(self.file, dialog.thresh, dialog.taille_bloc)
             LBP.mark_copy_moved_regions(matches, self.output, dialog.taille_bloc)
             self.charge_image(self.output, 550, 10)
+        else:
+            self.output = dialog.filename  
+            LBP = LocBinPatt()
+            matches = LBP.compare_lbp_desc(self.file, dialog.thresh, dialog.taille_bloc)
+            LBP.mark_copy_moved_regions(matches, self.output, dialog.taille_bloc)
+            self.charge_image(self.output, 550, 10)
+            matches, self.exec_time, self.mem_used, self.peak_mem = measure(LBP.compare_lbp_desc, self.file, dialog.thresh, dialog.taille_bloc)
+            self.last_lbp_res = LBP.mark_copy_moved_regions(matches, self.output, dialog.taille_bloc)
+            self.update_lbp(self.last_lbp_res, answer)
+            write_result("data_lbp.json", self.lbp_clean, dialog.thresh, self.lbp_vp, self.lbp_vn, self.lbp_fn, self.lbp_fp, self.exec_time, self.mem_used, self.peak_mem)
+            self.lbp_clean = False
+    
+    def update_lbp(self, res, expected):
+        if res == expected and res == True : self.lbp_vp += 1
+        elif res == expected and res == False : self.lbp_vn += 1
+        elif res != expected and res == True : self.lbp_fp += 1
+        elif res != expected and res == False : self.lbp_fn += 1
+    
+    def lbp_analysis(self):
+        plot_from_file("data_lbp.json")
+    
+    def lbp_analysis_res(self):
+        plot_resultats("data_lbp.json")
+
+    def lbp_analysis_comp(self):
+        plot_complexite("data_lpb.json")
 
     #Detecte les copy move forgeries en utilisant ORB et DoG
     def dog_orb(self):
@@ -204,7 +265,26 @@ class MyWindow(Tk):
             image = cv2.imread(self.file)
             OG.detectCopyMove(image, dialog.sigma, dialog.thresh, dialog.minMatch, self.output)
             self.charge_image(self.output, 550, 10)
+            self.last_orb_res, self.exec_time, self.mem_used, self.peak_mem = measure(OG.detectCopyMove, image, dialog.sigma, dialog.thresh, dialog.minMatch, self.output)
+            self.update_orb(self.last_orb_res, answer)
+            write_result("data_orb.json", self.orb_clean, float(dialog.thresh), self.orb_vp, self.orb_vn, self.orb_fn, self.orb_fp, self.exec_time, self.mem_used, self.peak_mem)
+            self.orb_clean = False
     
+    def update_orb(self, res, expected):
+        if res == expected and res == True : self.orb_vp += 1
+        elif res == expected and res == False : self.orb_vn += 1
+        elif res != expected and res == True : self.orb_fp += 1
+        elif res != expected and res == False : self.orb_fn += 1
+
+    def orb_analysis(self):
+        plot_from_file("data_orb.json")
+    
+    def orb_analysis_res(self):
+        plot_resultats("data_orb.json")
+
+    def orb_analysis_comp(self):
+        plot_complexite("data_orb.json")
+
     def do_about(self):
         messagebox.showinfo("My title", "My message")
 
