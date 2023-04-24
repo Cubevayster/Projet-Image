@@ -118,6 +118,8 @@ class MyWindow(Tk):
     def siftclustering(self):
         dialog = threshdialog(self)
         answer = messagebox.askyesnocancel("Question", "Do you want an analysis about the results?")
+        res_answer = messagebox.askyesno("Question", "Do you expect Falsification ?")
+        res_answer = bool(res_answer)
         if dialog.filename is None:
             return None
         elif dialog.filename is not None and not answer:  
@@ -125,24 +127,26 @@ class MyWindow(Tk):
             image = cv2.imread(self.file)
             sift = SiftClustering()
             sift.detectCopyMove(image, self.output, dialog.threshold)
-            self.charge_image(self.output, 550, 10)
+            self.charge_image(self.output, 600, 10)
         else:
             self.output = dialog.filename
             image = cv2.imread(self.file)
             sift = SiftClustering()
             self.last_sift_res, self.exec_time, self.mem_used, self.peak_mem = measure(sift.detectCopyMove, image, self.output, float(dialog.thresh))
-            self.charge_image(self.output, 550, 10)
-            self.update_sift(self.last_sift_res, answer)
+            self.charge_image(self.output, 600, 10)
+            print(self.last_sift_res, res_answer,self.sift_vp,self.sift_vn,self.sift_fn,self.sift_fp)
+            self.update_sift(self.last_sift_res, res_answer)
+            print(self.last_sift_res, res_answer,self.sift_vp,self.sift_vn,self.sift_fn,self.sift_fp)
             write_result("data_sift.json", self.sift_clean, float(dialog.thresh), self.sift_vp, self.sift_vn, self.sift_fn, self.sift_fp, self.exec_time, self.mem_used, self.peak_mem)
             self.sift_clean = False
     
     
     #Met a jour les resultats analyse sift
     def update_sift(self, res, expected):
-        if res == expected and res == True : self.sift_vp += 1
-        elif res == expected and res == False : self.sift_vn += 1
-        elif res != expected and res == True : self.sift_fp += 1
-        elif res != expected and res == False : self.sift_fn += 1
+        if res == True and expected == True : self.sift_vp += 1
+        elif res == True and expected == False : self.sift_fp += 1
+        elif res == False and expected == True : self.sift_fn += 1
+        elif res == False and expected == False : self.sift_vn += 1
 
     def siftclustering_analysis(self):
         plot_from_file("data_sift.json")
@@ -166,7 +170,7 @@ class MyWindow(Tk):
             image = cv2.imread(self.file)
             Contours = PreProcessing()
             Contours.contours(image, self.output)
-            self.charge_image(self.output, 550, 10)
+            self.charge_image(self.output, 600, 10)
 
     #Convertis image en nuances de gris
     def ndg(self):
@@ -178,7 +182,7 @@ class MyWindow(Tk):
             image = cv2.imread(self.file)
             NDG = PreProcessing()
             NDG.ndg(image, self.output)
-            self.charge_image(self.output, 550, 10)
+            self.charge_image(self.output, 600, 10)
 
     #Decoupe image en blocs
     def block(self):
@@ -189,7 +193,7 @@ class MyWindow(Tk):
             self.output = dialog.filename  
             LBP = LocBinPatt()
             LBP.compute_and_draw_grid(self.file, self.output, dialog.block)
-            self.charge_image(self.output, 550, 10)
+            self.charge_image(self.output, 600, 10)
 
     #Dessine les points cle de limage
     def keypoints(self):
@@ -201,7 +205,7 @@ class MyWindow(Tk):
             image = cv2.imread(self.file)
             KP = PreProcessing()
             KP.keypoints(image, self.output)
-            self.charge_image(self.output, 550, 10)
+            self.charge_image(self.output, 600, 10)
 
     #Applique sobel sur limage
     def sobel_filter(self):
@@ -213,7 +217,7 @@ class MyWindow(Tk):
             image = cv2.imread(self.file)
             SOBEL = PreProcessing()
             SOBEL.sobel(image, self.output)
-            self.charge_image(self.output, 550, 10)
+            self.charge_image(self.output, 600, 10)
 
  
     #Detecte les copy move forgeries en utilisant LBP
@@ -227,13 +231,13 @@ class MyWindow(Tk):
             LBP = LocBinPatt()
             matches = LBP.compare_lbp_desc(self.file, dialog.thresh, dialog.taille_bloc)
             LBP.mark_copy_moved_regions(matches, self.output, dialog.taille_bloc)
-            self.charge_image(self.output, 550, 10)
+            self.charge_image(self.output, 600, 10)
         else:
             self.output = dialog.filename  
             LBP = LocBinPatt()
             matches = LBP.compare_lbp_desc(self.file, dialog.thresh, dialog.taille_bloc)
             LBP.mark_copy_moved_regions(matches, self.output, dialog.taille_bloc)
-            self.charge_image(self.output, 550, 10)
+            self.charge_image(self.output, 600, 10)
             matches, self.exec_time, self.mem_used, self.peak_mem = measure(LBP.compare_lbp_desc, self.file, dialog.thresh, dialog.taille_bloc)
             self.last_lbp_res = LBP.mark_copy_moved_regions(matches, self.output, dialog.taille_bloc)
             self.update_lbp(self.last_lbp_res, answer)
@@ -266,7 +270,7 @@ class MyWindow(Tk):
             OG = ORB_DOG()
             image = cv2.imread(self.file)
             OG.detectCopyMove(image, dialog.sigma, dialog.thresh, dialog.minMatch, self.output)
-            self.charge_image(self.output, 550, 10)
+            self.charge_image(self.output, 600, 10)
             self.last_orb_res, self.exec_time, self.mem_used, self.peak_mem = measure(OG.detectCopyMove, image, dialog.sigma, dialog.thresh, dialog.minMatch, self.output)
             self.update_orb(self.last_orb_res, answer)
             write_result("data_orb.json", self.orb_clean, float(dialog.thresh), self.orb_vp, self.orb_vn, self.orb_fn, self.orb_fp, self.exec_time, self.mem_used, self.peak_mem)
